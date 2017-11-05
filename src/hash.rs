@@ -68,6 +68,7 @@ impl AsRef<[u8]> for Digest {
 }
 
 /// Algorithm that can be used to hash data.
+#[derive(Clone, Copy, Debug)]
 pub enum Algorithm {
     Md5,
     Sha1,
