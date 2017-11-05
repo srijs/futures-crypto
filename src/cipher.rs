@@ -1,3 +1,5 @@
+//! Symmetric ciphers for encryption and decryption of streams.
+
 use std::fmt::{Debug, Formatter, Result as FmtResult};
 
 use bytes::{BufMut, Bytes, BytesMut};
@@ -6,6 +8,7 @@ use openssl;
 
 use super::Error;
 
+/// Builder for stream adapters.
 pub struct Builder {
     algo: Algorithm,
     key: Vec<u8>,
@@ -13,12 +16,15 @@ pub struct Builder {
 }
 
 impl Builder {
+    /// Initialize a builder given an algorithm and a key.
     pub fn new(algo: Algorithm, key: &[u8]) -> Builder {
         Builder {
             algo, key: key.to_vec(), iv: None
         }
     }
 
+    /// Set the [initialization vector](https://en.wikipedia.org/wiki/Initialization_vector)
+    /// to be used for the cipher.
     pub fn with_iv(mut self, iv: Option<&[u8]>) -> Builder {
         self.iv = iv.map(|iv| iv.to_vec());
         self
@@ -33,15 +39,18 @@ impl Builder {
         Ok(CipherStream { inner, crypter, block_size, finalized: false })
     }
 
+    /// Create an encrypting stream adapter.
     pub fn encrypt<S>(self, inner: S) -> Result<Encrypt<S>, Error> {
         self.stream(inner, openssl::symm::Mode::Encrypt).map(Encrypt)
     }
 
+    /// Create a decrypting stream adapter.
     pub fn decrypt<S>(self, inner: S) -> Result<Decrypt<S>, Error> {
         self.stream(inner, openssl::symm::Mode::Decrypt).map(Decrypt)
     }
 }
 
+/// Stream adapter that transparently encrypts the data from the underlying stream.
 #[derive(Debug)]
 pub struct Encrypt<S>(CipherStream<S>);
 
@@ -57,6 +66,7 @@ impl<S: Stream> Stream for Encrypt<S>
     }
 }
 
+/// Stream adapter that transparently decrypts the data from the underlying stream.
 #[derive(Debug)]
 pub struct Decrypt<S>(CipherStream<S>);
 
@@ -124,6 +134,7 @@ impl<S: Stream> Stream for CipherStream<S>
     }
 }
 
+/// Algorithm that can be used to encrypt or decrypt data.
 #[derive(Clone, Copy, Debug)]
 pub enum Algorithm {
     Aes128Ecb,
