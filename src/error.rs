@@ -4,6 +4,7 @@ use std::io::{Error as IoError};
 
 use openssl;
 
+/// An error that can occur when performing crypto operations.
 #[derive(Debug)]
 pub struct Error(pub(crate) openssl::error::ErrorStack);
 
