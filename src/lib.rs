@@ -7,6 +7,7 @@ extern crate openssl;
 extern crate quickcheck;
 
 pub mod cipher;
+pub mod hash;
 
 #[derive(Clone, Debug)]
 pub struct Error(openssl::error::ErrorStack);
