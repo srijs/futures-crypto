@@ -15,11 +15,8 @@ impl<S> Hash<S> {
         Ok(Hash { inner, hasher })
     }
 
-    pub fn digest(mut self) -> (S, Result<Digest, Error>) {
-        match self.hasher.finish2() {
-            Err(err) => (self.inner, Err(Error(err))),
-            Ok(bytes) => (self.inner, Ok(Digest(bytes)))
-        }
+    pub fn digest(&mut self) -> Result<Digest, Error> {
+        self.hasher.finish2().map(Digest).map_err(Error)
     }
 
     pub fn into_inner(self) -> S {
