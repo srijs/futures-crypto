@@ -24,21 +24,20 @@ impl Builder {
         self
     }
 
-    fn stream<S>(self, inner: S, mode: openssl::symm::Mode) -> Result<CipherStream<S>, (S, Error)> {
+    fn stream<S>(self, inner: S, mode: openssl::symm::Mode) -> Result<CipherStream<S>, Error> {
         let cipher = self.algo.into_cipher();
         let block_size = cipher.block_size();
         let iv = self.iv.as_ref().map(|iv| iv.as_slice());
-        match openssl::symm::Crypter::new(cipher, mode, &self.key, iv) {
-            Err(err) => Err((inner, Error(err))),
-            Ok(crypter) => Ok(CipherStream { inner, crypter, block_size, finalized: false })
-        }
+        let crypter = openssl::symm::Crypter::new(cipher, mode, &self.key, iv)
+            .map_err(Error)?;
+        Ok(CipherStream { inner, crypter, block_size, finalized: false })
     }
 
-    pub fn encrypt<S>(self, inner: S) -> Result<Encrypt<S>, (S, Error)> {
+    pub fn encrypt<S>(self, inner: S) -> Result<Encrypt<S>, Error> {
         self.stream(inner, openssl::symm::Mode::Encrypt).map(Encrypt)
     }
 
-    pub fn decrypt<S>(self, inner: S) -> Result<Decrypt<S>, (S, Error)> {
+    pub fn decrypt<S>(self, inner: S) -> Result<Decrypt<S>, Error> {
         self.stream(inner, openssl::symm::Mode::Decrypt).map(Decrypt)
     }
 }
