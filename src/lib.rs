@@ -6,8 +6,8 @@ extern crate openssl;
 #[macro_use]
 extern crate quickcheck;
 
+mod error;
+pub use self::error::Error;
+
 pub mod cipher;
 pub mod hash;
-
-#[derive(Clone, Debug)]
-pub struct Error(openssl::error::ErrorStack);
