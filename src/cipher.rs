@@ -80,9 +80,11 @@ struct CipherStream<S> {
     block_size: usize
 }
 
-impl<S> Debug for CipherStream<S> {
+impl<S: Debug> Debug for CipherStream<S> {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        f.debug_struct("CipherStream").finish()
+        f.debug_struct("CipherStream")
+            .field("inner", &self.inner)
+            .finish()
     }
 }
 
