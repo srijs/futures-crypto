@@ -1,30 +1,37 @@
+//! Hash algorithms for computing digests of streams.
+
 use futures::{Async, Poll, Stream};
+use hex::ToHex;
 use openssl;
 
 use super::Error;
 
-pub struct Hash<S> {
+/// Stream adapter that computes a hash over the data while forwarding it.
+pub struct ForwardHash<S> {
     inner: S,
     hasher: openssl::hash::Hasher
 }
 
-impl<S> Hash<S> {
-    pub fn new(inner: S, algo: Algorithm) -> Result<Hash<S>, Error> {
+impl<S> ForwardHash<S> {
+    /// Given an algorithm, create a new stream adapter.
+    pub fn new(inner: S, algo: Algorithm) -> Result<ForwardHash<S>, Error> {
         let hasher = openssl::hash::Hasher::new(algo.into_message_digest())
             .map_err(Error)?;
-        Ok(Hash { inner, hasher })
+        Ok(ForwardHash { inner, hasher })
     }
 
+    /// Compute the hash digest and reset the internal hashing state.
     pub fn digest(&mut self) -> Result<Digest, Error> {
         self.hasher.finish2().map(Digest).map_err(Error)
     }
 
+    /// Extract the underlying stream.
     pub fn into_inner(self) -> S {
         self.inner
     }
 }
 
-impl<S: Stream> Stream for Hash<S>
+impl<S: Stream> Stream for ForwardHash<S>
     where S::Item: AsRef<[u8]>,
           S::Error: From<Error>
 {
@@ -43,7 +50,16 @@ impl<S: Stream> Stream for Hash<S>
     }
 }
 
+/// Stack-allocated binary hash digest.
+///
+/// Can be converted to a hexadecimal representation using `.to_string()`.
 pub struct Digest(openssl::hash::DigestBytes);
+
+impl ToString for Digest {
+    fn to_string(&self) -> String {
+        self.0.to_hex()
+    }
+}
 
 impl AsRef<[u8]> for Digest {
     fn as_ref(&self) -> &[u8] {
@@ -51,6 +67,7 @@ impl AsRef<[u8]> for Digest {
     }
 }
 
+/// Algorithm that can be used to hash data.
 pub enum Algorithm {
     Md5,
     Sha1,

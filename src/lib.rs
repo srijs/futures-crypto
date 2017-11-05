@@ -1,5 +1,6 @@
 extern crate bytes;
 extern crate futures;
+extern crate hex;
 extern crate openssl;
 
 #[cfg(test)]
