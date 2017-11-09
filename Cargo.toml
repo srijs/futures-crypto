@@ -2,6 +2,11 @@
 name = "futures-crypto"
 version = "0.1.0"
 authors = ["Sam Rijs <srijs@airpost.net>"]
+description = "Future-based crypto APIs"
+license = "BSD-2-Clause"
+repository = "https://github.com/srijs/rust-futures-crypto"
+documentation = "https://docs.rs/futures-crypto"
+keywords = ["futures", "crypto", "aes", "cipher", "stream"]
 
 [dependencies]
 bytes = "0.4.5"
