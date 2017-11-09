@@ -6,7 +6,7 @@ authors = ["Sam Rijs <srijs@airpost.net>"]
 [dependencies]
 bytes = "0.4.5"
 futures = "0.1.17"
-hex = "0.2.0"
+#hex = "0.2.0"
 openssl = "0.9.20"
 
 [dev-dependencies]

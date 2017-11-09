@@ -1,6 +1,6 @@
 extern crate bytes;
 extern crate futures;
-extern crate hex;
+//extern crate hex;
 extern crate openssl;
 
 #[cfg(test)]
@@ -11,4 +11,4 @@ mod error;
 pub use self::error::Error;
 
 pub mod cipher;
-pub mod hash;
+//pub mod hash;
