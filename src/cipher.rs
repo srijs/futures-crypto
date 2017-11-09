@@ -8,18 +8,18 @@ use openssl;
 
 use super::Error;
 
-/// Builder for stream adapters.
+/// Configuration for stream adapters.
 #[derive(Clone, Debug)]
-pub struct Builder {
+pub struct Config {
     algo: Algorithm,
     key: [u8; MAX_KEY_LEN],
     iv: [u8; MAX_IV_LEN]
 }
 
-impl Builder {
-    /// Initialize a builder given an algorithm and a key.
-    pub fn new(algo: Algorithm) -> Builder {
-        Builder {
+impl Config {
+    /// Initialize a config given an algorithm.
+    pub fn new(algo: Algorithm) -> Config {
+        Config {
             algo, key: [0u8; MAX_KEY_LEN], iv: [0u8; MAX_IV_LEN]
         }
     }
@@ -52,21 +52,18 @@ impl Builder {
             .map_err(Error)?;
         Ok(CipherStream { inner, crypter, block_size, finalized: false })
     }
-
-    /// Create an encrypting stream adapter.
-    pub fn encrypt<S>(&self, inner: S) -> Result<Encrypt<S>, Error> {
-        self.stream(inner, openssl::symm::Mode::Encrypt).map(Encrypt)
-    }
-
-    /// Create a decrypting stream adapter.
-    pub fn decrypt<S>(&self, inner: S) -> Result<Decrypt<S>, Error> {
-        self.stream(inner, openssl::symm::Mode::Decrypt).map(Decrypt)
-    }
 }
 
 /// Stream adapter that transparently encrypts the data from the underlying stream.
 #[derive(Debug)]
 pub struct Encrypt<S>(CipherStream<S>);
+
+impl<S: Stream> Encrypt<S> {
+    /// Create an encrypting stream adapter.
+    pub fn new(config: &Config, inner: S) -> Result<Self, Error> {
+        config.stream(inner, openssl::symm::Mode::Encrypt).map(Encrypt)
+    }
+}
 
 impl<S: Stream> Stream for Encrypt<S>
     where S::Item: AsRef<[u8]>,
@@ -83,6 +80,13 @@ impl<S: Stream> Stream for Encrypt<S>
 /// Stream adapter that transparently decrypts the data from the underlying stream.
 #[derive(Debug)]
 pub struct Decrypt<S>(CipherStream<S>);
+
+impl<S: Stream> Decrypt<S> {
+    /// Create a decrypting stream adapter.
+    pub fn new(config: &Config, inner: S) -> Result<Self, Error> {
+        config.stream(inner, openssl::symm::Mode::Decrypt).map(Decrypt)
+    }
+}
 
 impl<S: Stream> Stream for Decrypt<S>
     where S::Item: AsRef<[u8]>,
@@ -209,7 +213,7 @@ mod test {
     use futures::Stream;
     use self::itertools::Itertools;
     use quickcheck::{Arbitrary, Gen};
-    use super::{Algorithm, Builder, Error, MAX_KEY_LEN, MAX_IV_LEN};
+    use super::{Algorithm, Config, Error, Encrypt, Decrypt, MAX_KEY_LEN, MAX_IV_LEN};
 
     const ALL_ALGOS: [Algorithm; 12] = [
         Algorithm::Aes128Ecb,
@@ -226,22 +230,22 @@ mod test {
         Algorithm::Aes256Cfb8,
     ];
 
-    impl Arbitrary for Builder {
-        fn arbitrary<G: Gen>(g: &mut G) -> Builder {
+    impl Arbitrary for Config {
+        fn arbitrary<G: Gen>(g: &mut G) -> Config {
             let algo = *g.choose(&ALL_ALGOS).unwrap();
-            let mut builder = Builder::new(algo);
-            g.fill_bytes(builder.key_mut());
-            builder.iv_mut().map(|iv| g.fill_bytes(iv));
-            builder
+            let mut config = Config::new(algo);
+            g.fill_bytes(config.key_mut());
+            config.iv_mut().map(|iv| g.fill_bytes(iv));
+            config
         }
     }
 
     quickcheck! {
-        fn roundtrip(builder: Builder, chunks: Vec<Vec<u8>>) -> bool {
+        fn roundtrip(config: Config, chunks: Vec<Vec<u8>>) -> bool {
             let inner = ::futures::stream::iter_ok::<_, Error>(chunks.clone());
-            let encrypt = builder.encrypt(inner)
+            let encrypt = Encrypt::new(&config, inner)
                 .expect("encrypt build failed");
-            let decrypt = builder.decrypt(encrypt)
+            let decrypt = Decrypt::new(&config, encrypt)
                 .expect("decrypt build failed");
             let roundtrip_chunks: Vec<Bytes> = decrypt.wait().collect::<Result<Vec<_>, Error>>()
                 .expect("rountrip collect failed");
