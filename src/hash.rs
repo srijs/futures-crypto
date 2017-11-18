@@ -2,46 +2,160 @@
 
 use std::fmt::{Debug, Formatter, Result as FmtResult};
 
-use futures::{Async, Poll, Stream};
+use futures::{Async, Future, Poll, Stream};
+use futures::sync::oneshot;
 use hex::ToHex;
 use openssl;
 
 use super::Error;
 
 /// Stream adapter that computes a hash over the data while forwarding it.
+#[derive(Debug)]
 pub struct Hash<S> {
-    inner: S,
-    hasher: openssl::hash::Hasher
-}
-
-impl<S: Debug> Debug for Hash<S> {
-    fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        f.debug_struct("StreamHasher")
-            .field("inner", &self.inner)
-            .finish()
-    }
+    inner: HashInner<S>
 }
 
 impl<S: Stream> Hash<S> {
     /// Given an algorithm, create a new stream adapter.
     pub fn new(algo: Algorithm, inner: S) -> Result<Self, Error> {
-        let hasher = openssl::hash::Hasher::new(algo.into_message_digest())
-            .map_err(Error)?;
-        Ok(Hash { inner, hasher })
+        Ok(Hash { inner: HashInner::new(algo, inner)? })
     }
 
     /// Compute the hash digest and reset the internal hashing state.
     pub fn digest(&mut self) -> Result<Digest, Error> {
-        self.hasher.finish2().map(Digest).map_err(Error)
+        self.inner.digest()
+    }
+
+    /// Split the stream adapter into two halves, one to receive the computed digest,
+    /// and one to compute the hash over the stream.
+    ///
+    /// This is very useful for situations where ownership of the stream carrying the data
+    /// needs to be transferred to a place that does not return it,
+    /// such as a [hyper](https://hyper.rs/) client request or server response.
+    ///
+    /// The receiving half (`SplitDigest`) is a future that resolves with the digest
+    /// as soon as the stream has been fully processed by the computing half.
+    ///
+    /// The computing half (`SplitHash`), similar to `Hash` itself, is a stream adapter
+    /// that computes the hash over the data of its underlying stream.
+    pub fn split(self) -> (SplitDigest, SplitHash<S>) {
+        let (tx, rx) = oneshot::channel();
+        let receive = SplitDigest { receiver: rx };
+        let compute = SplitHash { inner: self.inner, sender: Some(tx) };
+        (receive, compute)
     }
 
     /// Extract the underlying stream.
     pub fn into_inner(self) -> S {
-        self.inner
+        self.inner.into_inner()
     }
 }
 
 impl<S: Stream> Stream for Hash<S>
+    where S::Item: AsRef<[u8]>,
+          S::Error: From<Error>
+{
+    type Item = S::Item;
+    type Error = S::Error;
+
+    fn poll(&mut self) -> Poll<Option<S::Item>, S::Error> {
+        self.inner.poll()
+    }
+}
+
+/// The receiving half of a split hashing process.
+///
+/// This is a future that resolves with the digest as soon as the stream
+/// has been fully consumed.
+/// It resolves with `None` when the computing half is dropped prematurely.
+///
+/// See [`Hash::split`](struct.Hash.html#method.split) for more information.
+#[derive(Debug)]
+pub struct SplitDigest {
+    receiver: oneshot::Receiver<Result<Digest, Error>>
+}
+
+impl Future for SplitDigest {
+    type Item = Option<Digest>;
+    type Error = Error;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        match self.receiver.poll() {
+            Err(_) => Ok(Async::Ready(None)),
+            Ok(Async::NotReady) => Ok(Async::NotReady),
+            Ok(Async::Ready(result)) => result.map(|digest| Async::Ready(Some(digest)))
+        }
+    }
+}
+
+/// The computing half of a split hashing process.
+///
+/// See [`Hash::split`](struct.Hash.html#method.split) for more information.
+#[derive(Debug)]
+pub struct SplitHash<S> {
+    inner: HashInner<S>,
+    sender: Option<oneshot::Sender<Result<Digest, Error>>>
+}
+
+impl<S: Stream> SplitHash<S> {
+    /// Extract the underlying stream.
+    pub fn into_inner(self) -> S {
+        self.inner.into_inner()
+    }
+}
+
+impl<S: Stream> Stream for SplitHash<S>
+    where S::Item: AsRef<[u8]>,
+          S::Error: From<Error>
+{
+    type Item = S::Item;
+    type Error = S::Error;
+
+    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+        match self.inner.poll() {
+            Err(err) => Err(err),
+            Ok(Async::NotReady) => Ok(Async::NotReady),
+            Ok(Async::Ready(Some(item))) => Ok(Async::Ready(Some(item))),
+            Ok(Async::Ready(None)) => {
+                if let Some(sender) = self.sender.take() {
+                    sender.send(self.inner.digest()).ok();
+                }
+                Ok(Async::Ready(None))
+            }
+        }
+    }
+}
+
+struct HashInner<S> {
+    inner: S,
+    hasher: openssl::hash::Hasher
+}
+
+impl<S: Debug> Debug for HashInner<S> {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        f.debug_struct("HashInner")
+            .field("inner", &self.inner)
+            .finish()
+    }
+}
+
+impl<S: Stream> HashInner<S> {
+    fn new(algo: Algorithm, inner: S) -> Result<Self, Error> {
+        let hasher = openssl::hash::Hasher::new(algo.into_message_digest())
+            .map_err(Error)?;
+        Ok(HashInner { inner, hasher })
+    }
+
+    fn digest(&mut self) -> Result<Digest, Error> {
+        self.hasher.finish2().map(Digest).map_err(Error)
+    }
+
+    fn into_inner(self) -> S {
+        self.inner
+    }
+}
+
+impl<S: Stream> Stream for HashInner<S>
     where S::Item: AsRef<[u8]>,
           S::Error: From<Error>
 {
@@ -113,18 +227,36 @@ impl Algorithm {
 
 #[cfg(test)]
 mod test {
-    use futures::Stream;
+    use futures::{Future, Stream};
     use futures::stream::iter_ok;
 
     use super::{Algorithm, Error,  Hash};
 
     #[test]
-    fn stream_sha1() {
+    fn sha1() {
         let input = iter_ok::<_, Error>(vec!["foo", "bar", "baz", "quux"]);
         let mut hash = Hash::new(Algorithm::Sha1, input).unwrap();
         let output = hash.by_ref().wait().collect::<Result<Vec<_>, _>>().unwrap();
         assert_eq!(output, vec!["foo", "bar", "baz", "quux"]);
         let digest = hash.digest().unwrap();
         assert_eq!(digest.to_hex_string(), "d663229325c61c5e5fd52f503961aab83e902313");
+    }
+
+    #[test]
+    fn split_sha1() {
+        let input = iter_ok::<_, Error>(vec!["foo", "bar", "baz", "quux"]);
+        let (split_digest, split_hash) = Hash::new(Algorithm::Sha1, input).unwrap().split();
+        let output = split_hash.wait().collect::<Result<Vec<_>, _>>().unwrap();
+        assert_eq!(output, vec!["foo", "bar", "baz", "quux"]);
+        let digest = split_digest.wait().unwrap().unwrap();
+        assert_eq!(digest.to_hex_string(), "d663229325c61c5e5fd52f503961aab83e902313");
+    }
+
+    #[test]
+    fn split_drop() {
+        let input = iter_ok::<_, Error>(vec!["foo", "bar", "baz", "quux"]);
+        let (split_digest, split_hash) = Hash::new(Algorithm::Sha1, input).unwrap().split();
+        drop(split_hash);
+        assert!(split_digest.wait().unwrap().is_none());
     }
 }
