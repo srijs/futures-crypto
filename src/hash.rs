@@ -22,9 +22,9 @@ impl<S: Debug> Debug for Hash<S> {
     }
 }
 
-impl<S> Hash<S> {
+impl<S: Stream> Hash<S> {
     /// Given an algorithm, create a new stream adapter.
-    pub fn new(algo: Algorithm, inner: S) -> Result<Hash<S>, Error> {
+    pub fn new(algo: Algorithm, inner: S) -> Result<Self, Error> {
         let hasher = openssl::hash::Hasher::new(algo.into_message_digest())
             .map_err(Error)?;
         Ok(Hash { inner, hasher })
@@ -121,14 +121,10 @@ mod test {
     #[test]
     fn stream_sha1() {
         let input = iter_ok::<_, Error>(vec!["foo", "bar", "baz", "quux"]);
-        let hash = Hash::new(Algorithm::Sha1, input).unwrap();
-        let mut wait = hash.wait();
-        assert_eq!(wait.next().unwrap().unwrap(), "foo");
-        assert_eq!(wait.next().unwrap().unwrap(), "bar");
-        assert_eq!(wait.next().unwrap().unwrap(), "baz");
-        assert_eq!(wait.next().unwrap().unwrap(), "quux");
-        assert!(wait.next().is_none());
-        let digest = wait.into_inner().digest().unwrap();
+        let mut hash = Hash::new(Algorithm::Sha1, input).unwrap();
+        let output = hash.by_ref().wait().collect::<Result<Vec<_>, _>>().unwrap();
+        assert_eq!(output, vec!["foo", "bar", "baz", "quux"]);
+        let digest = hash.digest().unwrap();
         assert_eq!(digest.to_hex_string(), "d663229325c61c5e5fd52f503961aab83e902313");
     }
 }
