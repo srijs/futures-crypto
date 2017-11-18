@@ -135,3 +135,17 @@ impl Future for TaskInner {
         Ok(Async::Ready(output.freeze()))
     }
 }
+
+#[cfg(test)]
+mod test {
+    use futures::Future;
+
+    use super::Generator;
+
+    #[test]
+    fn random_bytes() {
+        let generator = Generator::new(1);
+        let random_bytes = generator.random_bytes(128).wait().unwrap();
+        assert_eq!(random_bytes.len(), 128);
+    }
+}
