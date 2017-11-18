@@ -4,6 +4,7 @@ version = "0.1.1"
 authors = ["Sam Rijs <srijs@airpost.net>"]
 description = "Utilities for futures-based asynchronous cryptography"
 license = "MIT/Apache-2.0"
+readme = "README.md"
 repository = "https://github.com/srijs/rust-cryptonite"
 documentation = "https://docs.rs/cryptonite"
 keywords = ["futures", "crypto", "aes", "cipher", "stream"]
