@@ -156,7 +156,7 @@ const MAX_IV_LEN: usize = 16;
 const MAX_KEY_LEN: usize = 32;
 
 /// Algorithm that can be used to encrypt or decrypt data.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Algorithm {
     /// AES algorithm with 128-bit keys in Electronic Codebook mode.
     Aes128Ecb,

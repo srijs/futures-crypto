@@ -128,7 +128,8 @@ impl<S: Stream> Stream for SplitHash<S>
 
 struct HashInner<S> {
     inner: S,
-    hasher: openssl::hash::Hasher
+    hasher: openssl::hash::Hasher,
+    algorithm: Algorithm
 }
 
 impl<S: Debug> Debug for HashInner<S> {
@@ -140,14 +141,19 @@ impl<S: Debug> Debug for HashInner<S> {
 }
 
 impl<S: Stream> HashInner<S> {
-    fn new(algo: Algorithm, inner: S) -> Result<Self, Error> {
-        let hasher = openssl::hash::Hasher::new(algo.into_message_digest())
+    fn new(algorithm: Algorithm, inner: S) -> Result<Self, Error> {
+        let hasher = openssl::hash::Hasher::new(algorithm.into_message_digest())
             .map_err(Error)?;
-        Ok(HashInner { inner, hasher })
+        Ok(HashInner { inner, hasher, algorithm })
     }
 
     fn digest(&mut self) -> Result<Digest, Error> {
-        self.hasher.finish2().map(Digest).map_err(Error)
+        self.hasher.finish2().map(|bytes| {
+            Digest {
+                bytes: bytes,
+                algorithm: self.algorithm
+            }
+        }).map_err(Error)
     }
 
     fn into_inner(self) -> S {
@@ -176,23 +182,31 @@ impl<S: Stream> Stream for HashInner<S>
 
 /// Stack-allocated binary hash digest.
 #[derive(Debug)]
-pub struct Digest(openssl::hash::DigestBytes);
+pub struct Digest {
+    bytes: openssl::hash::DigestBytes,
+    algorithm: Algorithm
+}
 
 impl Digest {
+    /// Get the algorithm that was used to compute the digest.
+    pub fn algorithm(&self) -> Algorithm {
+        self.algorithm
+    }
+
     /// Convert the digest into a hex-encoded string.
     pub fn to_hex_string(&self) -> String {
-        self.0.to_hex()
+        self.bytes.to_hex()
     }
 }
 
 impl AsRef<[u8]> for Digest {
     fn as_ref(&self) -> &[u8] {
-        &*self.0
+        &*self.bytes
     }
 }
 
 /// Algorithm that can be used to hash data.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Algorithm {
     /// MD-5
     Md5,
@@ -239,6 +253,7 @@ mod test {
         let output = hash.by_ref().wait().collect::<Result<Vec<_>, _>>().unwrap();
         assert_eq!(output, vec!["foo", "bar", "baz", "quux"]);
         let digest = hash.digest().unwrap();
+        assert_eq!(digest.algorithm(), Algorithm::Sha1);
         assert_eq!(digest.to_hex_string(), "d663229325c61c5e5fd52f503961aab83e902313");
     }
 
@@ -249,6 +264,7 @@ mod test {
         let output = split_hash.wait().collect::<Result<Vec<_>, _>>().unwrap();
         assert_eq!(output, vec!["foo", "bar", "baz", "quux"]);
         let digest = split_digest.wait().unwrap().unwrap();
+        assert_eq!(digest.algorithm(), Algorithm::Sha1);
         assert_eq!(digest.to_hex_string(), "d663229325c61c5e5fd52f503961aab83e902313");
     }
 
