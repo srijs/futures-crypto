@@ -1,5 +1,7 @@
 //! Hash algorithms for computing digests of streams.
 
+use std::fmt::{Debug, Formatter, Result as FmtResult};
+
 use futures::{Async, Poll, Stream};
 use hex::ToHex;
 use openssl;
@@ -7,17 +9,25 @@ use openssl;
 use super::Error;
 
 /// Stream adapter that computes a hash over the data while forwarding it.
-pub struct ForwardHash<S> {
+pub struct Hash<S> {
     inner: S,
     hasher: openssl::hash::Hasher
 }
 
-impl<S> ForwardHash<S> {
+impl<S: Debug> Debug for Hash<S> {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        f.debug_struct("StreamHasher")
+            .field("inner", &self.inner)
+            .finish()
+    }
+}
+
+impl<S> Hash<S> {
     /// Given an algorithm, create a new stream adapter.
-    pub fn new(inner: S, algo: Algorithm) -> Result<ForwardHash<S>, Error> {
+    pub fn new(algo: Algorithm, inner: S) -> Result<Hash<S>, Error> {
         let hasher = openssl::hash::Hasher::new(algo.into_message_digest())
             .map_err(Error)?;
-        Ok(ForwardHash { inner, hasher })
+        Ok(Hash { inner, hasher })
     }
 
     /// Compute the hash digest and reset the internal hashing state.
@@ -31,7 +41,7 @@ impl<S> ForwardHash<S> {
     }
 }
 
-impl<S: Stream> Stream for ForwardHash<S>
+impl<S: Stream> Stream for Hash<S>
     where S::Item: AsRef<[u8]>,
           S::Error: From<Error>
 {
@@ -51,12 +61,12 @@ impl<S: Stream> Stream for ForwardHash<S>
 }
 
 /// Stack-allocated binary hash digest.
-///
-/// Can be converted to a hexadecimal representation using `.to_string()`.
+#[derive(Debug)]
 pub struct Digest(openssl::hash::DigestBytes);
 
-impl ToString for Digest {
-    fn to_string(&self) -> String {
+impl Digest {
+    /// Convert the digest into a hex-encoded string.
+    pub fn to_hex_string(&self) -> String {
         self.0.to_hex()
     }
 }
@@ -70,11 +80,17 @@ impl AsRef<[u8]> for Digest {
 /// Algorithm that can be used to hash data.
 #[derive(Clone, Copy, Debug)]
 pub enum Algorithm {
+    /// MD-5
     Md5,
+    /// SHA-1
     Sha1,
+    /// SHA-224
     Sha224,
+    /// SHA-256
     Sha256,
+    /// SHA-384
     Sha384,
+    /// SHA-512
     Sha512,
 
     #[doc(hidden)]
@@ -92,5 +108,27 @@ impl Algorithm {
             Algorithm::Sha512 => openssl::hash::MessageDigest::sha512(),
             Algorithm::_Donotmatch => unreachable!()
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use futures::Stream;
+    use futures::stream::iter_ok;
+
+    use super::{Algorithm, Error,  Hash};
+
+    #[test]
+    fn stream_sha1() {
+        let input = iter_ok::<_, Error>(vec!["foo", "bar", "baz", "quux"]);
+        let hash = Hash::new(Algorithm::Sha1, input).unwrap();
+        let mut wait = hash.wait();
+        assert_eq!(wait.next().unwrap().unwrap(), "foo");
+        assert_eq!(wait.next().unwrap().unwrap(), "bar");
+        assert_eq!(wait.next().unwrap().unwrap(), "baz");
+        assert_eq!(wait.next().unwrap().unwrap(), "quux");
+        assert!(wait.next().is_none());
+        let digest = wait.into_inner().digest().unwrap();
+        assert_eq!(digest.to_hex_string(), "d663229325c61c5e5fd52f503961aab83e902313");
     }
 }
