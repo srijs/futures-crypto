@@ -5,3 +5,5 @@ functions such as symmetric encryption, hashing and random number generation.
 
 The APIs provided are based on abstractions from the [`futures`](https://docs.rs/futures)
 crate.
+
+The underlying crytographic operations are provided by OpenSSL.

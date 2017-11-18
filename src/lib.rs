@@ -3,6 +3,8 @@
 //!
 //! The APIs provided are based on abstractions from the [`futures`](https://docs.rs/futures)
 //! crate.
+//!
+//! The underlying crytographic operations are provided by OpenSSL.
 
 #![deny(warnings, missing_docs, missing_debug_implementations)]
 
