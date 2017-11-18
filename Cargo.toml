@@ -1,11 +1,11 @@
 [package]
-name = "futures-crypto"
+name = "cryptonite"
 version = "0.1.0"
 authors = ["Sam Rijs <srijs@airpost.net>"]
 description = "Utilities for futures-based asynchronous cryptography"
 license = "BSD-2-Clause"
-repository = "https://github.com/srijs/rust-futures-crypto"
-documentation = "https://docs.rs/futures-crypto"
+repository = "https://github.com/srijs/rust-cryptonite"
+documentation = "https://docs.rs/cryptonite"
 keywords = ["futures", "crypto", "aes", "cipher", "stream"]
 
 [dependencies]
