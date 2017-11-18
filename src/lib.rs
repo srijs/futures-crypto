@@ -1,3 +1,7 @@
+//! Utilities for `futures`-based asynchronous cryptography.
+
+#![deny(warnings, missing_docs, missing_debug_implementations)]
+
 extern crate bytes;
 extern crate futures;
 extern crate futures_cpupool;

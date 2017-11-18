@@ -158,17 +158,29 @@ const MAX_KEY_LEN: usize = 32;
 /// Algorithm that can be used to encrypt or decrypt data.
 #[derive(Clone, Copy, Debug)]
 pub enum Algorithm {
+    /// AES algorithm with 128-bit keys in Electronic Codebook mode.
     Aes128Ecb,
+    /// AES algorithm with 128-bit keys in Cipher Block Chaining mode.
     Aes128Cbc,
+    /// AES algorithm with 128-bit keys in Counter mode.
     Aes128Ctr,
+    /// AES algorithm with 128-bit keys in Cipher Feedback mode with 1-bit feedback.
     Aes128Cfb1,
+    /// AES algorithm with 128-bit keys in Cipher Feedback mode with 128-bit feedback.
     Aes128Cfb128,
+    /// AES algorithm with 128-bit keys in Cipher Feedback mode with 8-bit feedback.
     Aes128Cfb8,
+    /// AES algorithm with 256-bit keys in Electronic Codebook mode.
     Aes256Ecb,
+    /// AES algorithm with 256-bit keys in Cipher Block Chaining mode.
     Aes256Cbc,
+    /// AES algorithm with 256-bit keys in Counter mode.
     Aes256Ctr,
+    /// AES algorithm with 256-bit keys in Cipher Feedback mode with 1-bit feedback.
     Aes256Cfb1,
+    /// AES algorithm with 256-bit keys in Cipher Feedback mode with 128-bit feedback.
     Aes256Cfb128,
+    /// AES algorithm with 256-bit keys in Cipher Feedback mode with 8-bit feedback.
     Aes256Cfb8,
 
     #[doc(hidden)]
@@ -196,10 +208,14 @@ impl Algorithm {
         }
     }
 
+    /// Get the required key length for the algorithm.
     pub fn key_len(self) -> usize  {
         self.into_cipher().key_len()
     }
 
+    /// Get the required IV length for the algorithm.
+    ///
+    /// Returns `None` if the algorithm does not require an IV.
     pub fn iv_len(self) -> Option<usize> {
         self.into_cipher().iv_len()
     }
