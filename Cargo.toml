@@ -1,6 +1,6 @@
 [package]
 name = "cryptonite"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Sam Rijs <srijs@airpost.net>"]
 description = "Utilities for futures-based asynchronous cryptography"
 license = "MIT/Apache-2.0"
